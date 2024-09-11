@@ -1,0 +1,9 @@
+I'd like to write a program that automates some work in google calander and sheets.
+I need a program that will open my calander, count the number of events in the last week with a subject that contains "Matt"
+Then it should open the google sheet "matt-test" and add the number of events to cell B2.
+
+I'm on a mac and I use the google calendar and sheets on the web.
+
+I'm thinking I could use a script to open the calandar, count the events, and then use the sheets api to update the cell.
+
+What would be the best way to do this?  
