@@ -1,9 +1,35 @@
-I'd like to write a program that automates some work in google calander and sheets.
-I need a program that will open my calander, count the number of events in the last week with a subject that contains "Matt"
-Then it should open the google sheet "matt-test" and add the number of events to cell B2.
+I'd like to write a program that automates some work in google calendar and sheets.
+I want to use python pygsheets and autocalendar libraries.
 
-I'm on a mac and I use the google calendar and sheets on the web.
+When I run the program do this:
 
-I'm thinking I could use a script to open the calandar, count the events, and then use the sheets api to update the cell.
+Clear the "CLIENT LIST" tab and the "LAST WEEK" tab of prior data in the "Matt-data-2024-test" sheet.
+If these tabs don't exist, then create them. Both tabs names should be all caps.
 
-What would be the best way to do this?  
+** Make CLIENT LIST **
+* Look at the Google sheet file "Matt-data-2024-test" and the tab whose name contains "Sales & Sessions Completed" and the current year, eg "Sales & Sessions Completed 2024".
+
+    * In this sheet, look at the "CLIENT NAME" column.
+    * We want to create a list of the unique names and put them in the "CLIENT LIST" Tab. There may be existing names listed there, don't duplicate the names, only add any new ones you find.
+    * Then in the column to the right, add up the number of sessions completed for each client and put that in the "SESSIONS COMPLETED" column.
+    Be sure to do this before deduping the list of clients.
+    * Add column heads to the "CLIENT LIST" tab: "CLIENT NAME", "SESSIONS COMPLETED". Freeze the row with the column heads so it's always visible as you scroll.
+    * Make sure the results are sorted by the number of sessions completed, descending.
+
+** Look at the prior week on the calander **
+* open my google calendar, specifically "f4lathletics@gmail.com"
+* Look at the events during the prior week. I'm defining the prior week as Monday-Sunday of the week before the current week.
+* For each event, look at the title and description.
+* See if it contains the name of a client.
+    * Consider partial matches, typos, mispellings, and only first or last names when you match.
+    * Add the list of clients who Matt met with last week to a "LAST WEEK" tab in the "Matt-data-2024-test" sheet.
+    * I want the client list to be deduplicated, with columns for the "CLIENT NAME", "SESSIONS COMPLETED"
+* The number of sessions completed should be a running total of the number sessions completed for the client that week. eg. "1" or "2" or "3", etc.
+    * Sort the list by the number of sessions completed last week descending.
+    * Freeze the row with the column heads so it's always visible as you scroll.
+* List the dates of the sessions Matt met with clients last week one per column, in this style. eg. "Tues 9/10". If they met twice use two columns. etc. Label the columns "Session 1", "Session 2", etc. Only add as many columns as you need. The largest number of sessions any client had last week is the number of columns you should make, not more.
+
+** Make another tab called "TEMP"**
+* List the folks matt met with last week, and the date, and the number of sessions completed. List them chronologically, one per row.
+
+* Add a column to the right of "Sessions Completed" on the "TEMP" tab. In this column check and see if you can find a matching sessions on the same date for this client in the "Sales & Sessions Completed" tab from last week. If you find a match, write "MATCH". If not, write "NO MATCH". Note the format of the dates in the "Sales & Sessions Completed" tab may be inconsistent. Do your best to standardize them and match them up.
