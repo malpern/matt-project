@@ -8,7 +8,18 @@ from src.data_processor import DataProcessor
 from src.sheet_manager import SheetManager
 from config.config import SPREADSHEET_NAME
 
-logger = logging.getLogger(__name__)
+def main():
+    # Set up logging configuration
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.StreamHandler()  # Output logs to the console
+        ]
+    )
+
+    automation = GoogleCalendarSheetsAutomation()
+    automation.run()
 
 class GoogleCalendarSheetsAutomation:
     def __init__(self):
@@ -20,7 +31,7 @@ class GoogleCalendarSheetsAutomation:
         
     def run(self):
         try:
-            logger.info("Starting the script...")
+            logging.info("Starting the script...")
             self.create_backup()
             self.clear_or_create_tabs()
             self.update_client_list()
@@ -28,24 +39,22 @@ class GoogleCalendarSheetsAutomation:
             if clients_met:
                 self.create_sessions_tab(clients_met)
             self.reorder_tabs()
-            if not self.add_unmatched_sessions():
-                logger.info("Exiting script as requested.")
-                return
+            self.sheet_manager.add_unmatched_sessions()  # Call the method from SheetManager
         except Exception as e:
-            logger.error(f"An error occurred: {str(e)}")
+            logging.error(f"An error occurred: {str(e)}")
             import traceback
             traceback.print_exc()
         finally:
-            logger.info("Script execution completed.")
+            logging.info("Script execution completed.")
 
     def create_backup(self):
-        logger.info("Creating backup of 'Sales & Sessions Completed' tab...")
+        logging.info("Creating backup of 'Sales & Sessions Completed' tab...")
         self.sheet_manager.create_backup()
 
     def clear_or_create_tabs(self):
         self.sheet_manager.clear_or_create_tab("CLIENT LIST")
         self.sheet_manager.clear_or_create_tab("LAST WEEK")
-        logger.info("Tabs 'CLIENT LIST' and 'LAST WEEK' are ready.")
+        logging.info("Tabs 'CLIENT LIST' and 'LAST WEEK' are ready.")
 
     def update_client_list(self):
         self.sheet_manager.update_client_list()
@@ -66,15 +75,8 @@ class GoogleCalendarSheetsAutomation:
     def create_sessions_tab(self, clients_met: Dict[str, Dict[str, Union[List[Dict], int]]]):
         self.sheet_manager.create_sessions_tab(clients_met)
 
-    def add_unmatched_sessions(self):
-        return self.sheet_manager.add_unmatched_sessions()
-
     def reorder_tabs(self):
         self.sheet_manager.reorder_tabs()
-
-def main():
-    automation = GoogleCalendarSheetsAutomation()
-    automation.run()
 
 if __name__ == "__main__":
     main()

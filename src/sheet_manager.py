@@ -236,16 +236,27 @@ class SheetManager:
         sessions_sheet = self.get_sheet("SESSIONS")
         sessions_data = sessions_sheet.get_all_values()
         
-        # Get the Sales & Sessions Completed tab
+        # Get the latest data from the Sales & Sessions Completed tab
         current_year = datetime.now().year
         sales_tab_name = f"Sales & Sessions Completed {current_year}"
         sales_sheet = self.get_sheet(sales_tab_name)
-        sales_data = sales_sheet.get_all_values()
         
         # Filter unmatched sessions
         unmatched_sessions = [row for row in sessions_data[1:] if row[3] == "NO MATCH"]
         
+        # Sort the unmatched sessions by date
+        unmatched_sessions.sort(key=lambda x: datetime.strptime(x[1], '%a %m/%d').replace(year=current_year))
+        
+        confirmation = None
+
         for session in unmatched_sessions:
+            # Refresh the sheet data and get the current number of rows
+            sales_sheet.refresh()
+            sales_data = sales_sheet.get_all_values()
+            current_row_count = len(sales_data)  # Dynamically get the current row count
+            
+            self.logger.info(f"Current row count: {current_row_count}")
+
             client_name = session[0]
             try:
                 session_date = datetime.strptime(session[1], '%a %m/%d').replace(year=current_year)
@@ -254,74 +265,65 @@ class SheetManager:
                 continue
             
             # Find the appropriate row to insert the new session
-            insert_row = 1  # Default to inserting at the top if no match found
-            for i, row in enumerate(reversed(sales_data)):
-                if row and row[0]:  # Check if the row and date cell are not empty
+            insert_row = None
+            for i, row in enumerate(sales_data[1:], start=2):  # Start from 2 to account for header
+                if row and row[0]:
                     try:
                         row_date = self.data_processor.parse_date(row[0])
-                        if row_date == session_date.date():
-                            insert_row = len(sales_data) - i
-                            break
-                        elif row_date < session_date.date():
-                            insert_row = len(sales_data) - i + 1
+                        if row_date >= session_date.date():
+                            insert_row = i
                             break
                     except ValueError:
-                        self.logger.warning(f"Skipping row with invalid date: {row[0]}")
                         continue
+            
+            if insert_row is None:
+                insert_row = current_row_count + 1  # Insert at the end if no suitable position found
             
             # Prepare the new row data
             new_row = [
-                session_date.strftime('%m/%d/%Y'),  # Date
-                client_name,                        # Client Name
-                "Individual",                       # Assuming all unmatched sessions are individual
-                "x of x",                           # Placeholder for session count
-                "$XXX",                             # Placeholder for price
-                "DUE???",                           # Placeholder for payment status
-                "MONTLY CALC??",                    # Placeholder for monthly calculation
-                "NO MATCH, INSERTED"                # Indication that this was an unmatched session
+                session_date.strftime('%m/%d/%Y'),
+                client_name,
+                "Individual",
+                "x of x",
+                "$XXX",
+                "DUE???",
+                "MONTLY CALC??",
+                "NO MATCH, INSERTED"
             ]
             
-            try:
-                sales_sheet.insert_rows(insert_row, values=[new_row])
-                self.logger.info(f"Inserted unmatched session for {client_name} on {session_date.strftime('%m/%d/%Y')}")
-            except Exception as e:
-                self.logger.error(f"Error inserting row for {client_name}: {str(e)}")
-                self.logger.warning("Skipping this unmatched session and moving to the next one.")
-                continue  # Skip to the next unmatched session
-            
-            # Ask for confirmation
-            while True:
-                confirmation = input(f"Inserted unmatched session for {client_name} on {session_date.strftime('%m/%d/%Y')}. Is this correct? (y/a/n/q): ")
-                if confirmation.lower() == 'n':
-                    self.logger.info("User opted to remove the recently added row.")
+            while confirmation != 'a':
+                confirmation = input(f"Insert unmatched session for {client_name} on {session_date.strftime('%m/%d/%Y')} at row {insert_row}? (y/a/n/q): ")
+                if confirmation.lower() in ['y', 'a']:
+                    # Re-check the current row count right before insertion
+                    sales_sheet.refresh()
+                    current_row_count = len(sales_sheet.get_all_values())
+                    self.logger.info(f"Current row count before insertion: {current_row_count}")
+                    
+                    self.logger.info(f"Attempting to insert row at position {insert_row}")
                     try:
-                        sales_sheet.delete_rows(insert_row)
+                        if insert_row > current_row_count:
+                            self.logger.info(f"Appending row (sheet has {current_row_count} rows)")
+                            sales_sheet.append_table([new_row])
+                        else:
+                            self.logger.info(f"Inserting row at position {insert_row}")
+                            sales_sheet.insert_rows(insert_row, values=[new_row])
+                        self.logger.info(f"Successfully added unmatched session for {client_name}")
+                        break
                     except Exception as e:
-                        self.logger.error(f"Error deleting row for {client_name}: {str(e)}")
-                        self.logger.warning("Unable to remove the recently added row. Proceeding to the next unmatched session.")
-                    print("Apologies for the error. Removing the recently added row.")
+                        self.logger.error(f"Error adding row for {client_name}: {str(e)}")
+                        print(f"Error occurred: {str(e)}. Please check the spreadsheet manually.")
+                        break
+                elif confirmation.lower() == 'n':
+                    self.logger.info(f"Skipped adding session for {client_name}")
                     break
                 elif confirmation.lower() == 'q':
                     self.logger.info("User opted to quit unmatched session processing.")
-                    try:
-                        sales_sheet.delete_rows(insert_row)
-                    except Exception as e:
-                        self.logger.error(f"Error deleting row for {client_name}: {str(e)}")
-                        self.logger.warning("Unable to remove the recently added row. Quitting unmatched session processing.")
-                    print("Quitting unmatched session processing.")
-                    return False  # Indicate that the user wants to quit
-                elif confirmation.lower() == 'a':
-                    self.logger.info("User opted to proceed without further confirmations.")
-                    print("Proceeding with the remaining unmatched sessions without confirmation.")
-                    return True  # Indicate successful completion
-                elif confirmation.lower() == 'y':
-                    self.logger.info("User confirmed the inserted row.")
-                    break
+                    return False
                 else:
                     print("Invalid input. Please enter 'y', 'a', 'n', or 'q'.")
         
         self.logger.info("Finished adding unmatched sessions.")
-        return True  # Indicate successful completion
+        return True
 
     def reorder_tabs(self):
         self.logger.info("Reordering tabs...")
