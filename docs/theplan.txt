@@ -51,10 +51,7 @@ If these tabs don't exist, then create them. Both tabs names should be all caps
     * go through the "Sales & Sessions Completed" tab from last week from the bottom up, and find the first instance of a session with the same date.
         * Insert a row in the "Sales & Sessions Completed" tab below the row with the same date. We're going to insert the unmatched session.
         * Insert columns for date, client name, "Individual", "x of x", "$XXX", "DUE???", and "MONTLY CALC??", and "NO MATCH, INSERTED".
-    * After adding the row, pause the script to ask for confirmation that the client row was correctly inserted.
-    * eg. "Inserted unmatched session for Luke Alexander on 09/09/2024. Is this correct? (y/a/n/q):"
-        * if the user says "y", continue with the script
-        * if the user says "n", remove the recently added row.
-        * if the user say "q", quit the script.
-        * if the user says "a" contiue but don't ask for confirmation about any more unmatched sessions.
+        After inserting the row, print to the console the row you inserted.
+        Then look backwards in time in the table for the last time the person with the same name is listed. When you find them, print to the console the row you found.
+
 * Repeat for all unmatched sessions.

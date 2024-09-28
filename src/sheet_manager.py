@@ -230,6 +230,7 @@ class SheetManager:
         self.logger.info("'SESSIONS' tab creation and population completed.")
 
     def add_unmatched_sessions(self) -> bool:
+        print("Adding unmatched sessions to 'Sales & Sessions Completed' tab...")
         self.logger.info("Adding unmatched sessions to 'Sales & Sessions Completed' tab...")
         
         # Get the SESSIONS tab
@@ -239,90 +240,121 @@ class SheetManager:
         # Get the latest data from the Sales & Sessions Completed tab
         current_year = datetime.now().year
         sales_tab_name = f"Sales & Sessions Completed {current_year}"
-        sales_sheet = self.get_sheet(sales_tab_name)
+        try:
+            sales_sheet = self.get_sheet(sales_tab_name)
+        except Exception as e:
+            print(f"Error accessing '{sales_tab_name}' sheet: {str(e)}")
+            self.logger.error(f"Error accessing '{sales_tab_name}' sheet: {str(e)}")
+            return False
         
         # Filter unmatched sessions
         unmatched_sessions = [row for row in sessions_data[1:] if row[3] == "NO MATCH"]
         
-        # Sort the unmatched sessions by date
-        unmatched_sessions.sort(key=lambda x: datetime.strptime(x[1], '%a %m/%d').replace(year=current_year))
-        
-        confirmation = None
+        if not unmatched_sessions:
+            print("No unmatched sessions found.")
+            self.logger.info("No unmatched sessions found.")
+            return True
 
+        print(f"Found {len(unmatched_sessions)} unmatched sessions.")
+        self.logger.info(f"Found {len(unmatched_sessions)} unmatched sessions.")
+
+        # Prepare new rows for all unmatched sessions
+        new_rows = []
         for session in unmatched_sessions:
-            # Refresh the sheet data and get the current number of rows
-            sales_sheet.refresh()
-            sales_data = sales_sheet.get_all_values()
-            current_row_count = len(sales_data)  # Dynamically get the current row count
-            
-            self.logger.info(f"Current row count: {current_row_count}")
-
             client_name = session[0]
             try:
                 session_date = datetime.strptime(session[1], '%a %m/%d').replace(year=current_year)
+                new_row = [
+                    session_date.strftime('%m/%d/%Y'),
+                    client_name,
+                    "Individual",
+                    "x of x",
+                    "$XXX",
+                    "DUE???",
+                    "MONTLY CALC??",
+                    "NO MATCH, INSERTED"
+                ]
+                new_rows.append(new_row)
             except ValueError:
+                print(f"Warning: Invalid date format for session: {session[1]}")
                 self.logger.warning(f"Invalid date format for session: {session[1]}")
-                continue
+
+        # Confirm with the user
+        confirmation = input(f"Add {len(new_rows)} unmatched sessions to the end of the sheet? (y/n): ")
+        if confirmation.lower() != 'y':
+            print("User opted not to add unmatched sessions.")
+            self.logger.info("User opted not to add unmatched sessions.")
+            return False
+
+        try:
+            # Refresh the sheet and get the current number of rows
+            sales_sheet.refresh()
+            all_values = sales_sheet.get_all_values()
+            current_row_count = len(all_values)
+            print(f"Current row count in '{sales_tab_name}': {current_row_count}")
+            self.logger.info(f"Current row count in '{sales_tab_name}': {current_row_count}")
             
-            # Find the appropriate row to insert the new session
-            insert_row = None
-            for i, row in enumerate(sales_data[1:], start=2):  # Start from 2 to account for header
-                if row and row[0]:
-                    try:
-                        row_date = self.data_processor.parse_date(row[0])
-                        if row_date >= session_date.date():
-                            insert_row = i
-                            break
-                    except ValueError:
-                        continue
-            
-            if insert_row is None:
-                insert_row = current_row_count + 1  # Insert at the end if no suitable position found
-            
-            # Prepare the new row data
-            new_row = [
-                session_date.strftime('%m/%d/%Y'),
-                client_name,
-                "Individual",
-                "x of x",
-                "$XXX",
-                "DUE???",
-                "MONTLY CALC??",
-                "NO MATCH, INSERTED"
-            ]
-            
-            while confirmation != 'a':
-                confirmation = input(f"Insert unmatched session for {client_name} on {session_date.strftime('%m/%d/%Y')} at row {insert_row}? (y/a/n/q): ")
-                if confirmation.lower() in ['y', 'a']:
-                    # Re-check the current row count right before insertion
-                    sales_sheet.refresh()
-                    current_row_count = len(sales_sheet.get_all_values())
-                    self.logger.info(f"Current row count before insertion: {current_row_count}")
-                    
-                    self.logger.info(f"Attempting to insert row at position {insert_row}")
-                    try:
-                        if insert_row > current_row_count:
-                            self.logger.info(f"Appending row (sheet has {current_row_count} rows)")
-                            sales_sheet.append_table([new_row])
-                        else:
-                            self.logger.info(f"Inserting row at position {insert_row}")
-                            sales_sheet.insert_rows(insert_row, values=[new_row])
-                        self.logger.info(f"Successfully added unmatched session for {client_name}")
-                        break
-                    except Exception as e:
-                        self.logger.error(f"Error adding row for {client_name}: {str(e)}")
-                        print(f"Error occurred: {str(e)}. Please check the spreadsheet manually.")
-                        break
-                elif confirmation.lower() == 'n':
-                    self.logger.info(f"Skipped adding session for {client_name}")
+            # Find the last non-empty row
+            last_non_empty_row = current_row_count
+            for i in range(current_row_count - 1, -1, -1):
+                if any(all_values[i]):
+                    last_non_empty_row = i + 1
                     break
-                elif confirmation.lower() == 'q':
-                    self.logger.info("User opted to quit unmatched session processing.")
-                    return False
-                else:
-                    print("Invalid input. Please enter 'y', 'a', 'n', or 'q'.")
-        
-        self.logger.info("Finished adding unmatched sessions.")
+            
+            print(f"Last non-empty row: {last_non_empty_row}")
+            self.logger.info(f"Last non-empty row: {last_non_empty_row}")
+            
+            # Resize the sheet if necessary
+            required_rows = last_non_empty_row + len(new_rows)
+            if required_rows > sales_sheet.rows:
+                print(f"Resizing sheet to {required_rows} rows...")
+                self.logger.info(f"Resizing sheet to {required_rows} rows...")
+                sales_sheet.resize(rows=required_rows)
+            
+            # Append all new rows at once
+            print(f"Appending {len(new_rows)} rows to the sheet...")
+            self.logger.info(f"Appending {len(new_rows)} rows to the sheet...")
+            
+            # Use update_values to add new rows, starting from the first empty row
+            start_cell = f'A{last_non_empty_row + 1}'
+            end_column = chr(ord('A') + len(new_rows[0]) - 1)  # Calculate the last column letter
+            end_cell = f'{end_column}{last_non_empty_row + len(new_rows)}'
+            range_to_update = f'{start_cell}:{end_cell}'
+            
+            print(f"Updating range: {range_to_update}")
+            self.logger.info(f"Updating range: {range_to_update}")
+            
+            sales_sheet.update_values(range_to_update, new_rows)
+            
+            # After adding new rows, get all values from the sheet
+            all_values = sales_sheet.get_all_values()
+
+            # Separate header and data
+            header = all_values[0]
+            data = all_values[1:]
+
+            # Sort data based on the date column (assuming it's the first column)
+            sorted_data = sorted(data, key=lambda x: datetime.strptime(x[0], '%m/%d/%Y'))
+
+            # Prepare the sorted data with the header
+            sorted_values = [header] + sorted_data
+
+            # Clear the sheet and update with sorted values
+            sales_sheet.clear()
+            sales_sheet.update_values('A1', sorted_values)
+
+            self.logger.info(f"Successfully added {len(new_rows)} unmatched sessions and sorted the sheet.")
+        except Exception as e:
+            self.logger.error(f"Error adding unmatched sessions or sorting: {str(e)}")
+            self.logger.info("Please check the spreadsheet manually.")
+            
+            # Additional debugging information
+            self.logger.info(f"Spreadsheet ID: {self.spreadsheet.id}")
+            self.logger.info(f"Sheet ID: {sales_sheet.id}")
+            self.logger.info(f"Sheet title: {sales_sheet.title}")
+            self.logger.info(f"Sheet dimensions: {sales_sheet.rows} rows x {sales_sheet.cols} columns")
+            return False
+
         return True
 
     def reorder_tabs(self):

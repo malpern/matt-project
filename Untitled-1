@@ -1,0 +1,59 @@
+import pygsheets
+from src.auth import GoogleAuth
+import logging
+import sys
+from datetime import datetime
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+
+def parse_date(date_string):
+    # Assuming the date format is MM/DD/YYYY
+    return datetime.strptime(date_string, '%m/%d/%Y')
+
+def sort_sheet():
+    # Authorize using the GoogleAuth class
+    try:
+        client = GoogleAuth.authorize()
+    except Exception as e:
+        logging.error(f"Authorization failed: {str(e)}")
+        sys.exit(1)
+
+    try:
+        # Open the specified spreadsheet
+        spreadsheet = client.open("Matt-data-2024-test")
+        
+        # Open the specified worksheet
+        worksheet = spreadsheet.worksheet_by_title("BACKUP_Sales & Sessions Completed 2024_20240920_202643")
+
+        # Get all values from the sheet
+        data = worksheet.get_all_values()
+
+        # Separate header and data
+        header = data[0]
+        data = data[1:]
+
+        # Sort data based on column A (index 0) chronologically
+        sorted_data = sorted(data, key=lambda x: parse_date(x[0]))
+
+        # Clear the sheet
+        worksheet.clear()
+
+        # Update the sheet with sorted data
+        worksheet.update_values('A1', [header] + sorted_data)
+
+        logging.info("Column A (date column) has been sorted chronologically.")
+
+    except pygsheets.exceptions.SpreadsheetNotFound:
+        logging.error("Spreadsheet 'Matt-data-2024-test' not found. Please check the name and permissions.")
+    except pygsheets.exceptions.WorksheetNotFound:
+        logging.error("Worksheet 'BACKUP_Sales & Sessions Completed 2024_20240920_202643' not found. Please check the tab name.")
+    except ValueError as e:
+        logging.error(f"Error parsing dates: {str(e)}. Please ensure all dates in column A are in the format MM/DD/YYYY.")
+    except Exception as e:
+        logging.error(f"An error occurred: {str(e)}")
+        logging.error(f"Error type: {type(e).__name__}")
+        logging.error(f"Error details: {e.args}")
+
+if __name__ == "__main__":
+    sort_sheet()

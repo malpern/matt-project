@@ -27,11 +27,17 @@ class GoogleAuth:
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 logging.info("Refreshing expired credentials...")
-                creds.refresh(Request())
-            else:
+                try:
+                    creds.refresh(Request())
+                except Exception as e:
+                    logging.warning(f"Error refreshing credentials: {str(e)}")
+                    creds = None
+            
+            if not creds:
                 logging.info("No valid credentials found. Starting new auth flow...")
                 flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
                 creds = flow.run_local_server(port=0)
+            
             logging.info("Saving new credentials...")
             with open(TOKEN_FILE, 'w') as token:
                 token.write(creds.to_json())
@@ -48,7 +54,8 @@ class GoogleAuth:
 
         for _ in range(num_retries):
             try:
-                return pygsheets.authorize(client_secret=CLIENT_SECRET_FILE)
+                creds = GoogleAuth.get_credentials()
+                return pygsheets.authorize(custom_credentials=creds)
             except Exception as e:
                 logging.warning(f"Error authorizing: {str(e)}")
                 logging.info(f"Retrying in {backoff_time} seconds...")
