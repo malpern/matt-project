@@ -271,10 +271,27 @@ class SheetManager:
                     "x of x",
                     "$XXX",
                     "DUE???",
-                    "MONTLY CALC??",
+                    "MONTHLY CALC??",
                     "NO MATCH, INSERTED"
                 ]
                 new_rows.append(new_row)
+                
+                # Print the inserted row to the console if the client name is Dale Scaiano
+                if client_name.lower() == "dale scaiano":
+                    print(f"Inserted row for Dale Scaiano: {new_row}")
+                    self.logger.info(f"Inserted row for Dale Scaiano: {new_row}")
+                
+                # Look backwards for the last occurrence of the same client
+                all_values = sales_sheet.get_all_values()
+                for row in reversed(all_values[1:]):  # Skip header
+                    if row[1].strip().lower() == client_name.strip().lower():
+                        print(f"Last occurrence of {client_name}: {row}")
+                        self.logger.info(f"Last occurrence of {client_name}: {row}")
+                        break
+                else:
+                    print(f"No previous occurrence found for {client_name}")
+                    self.logger.info(f"No previous occurrence found for {client_name}")
+                
             except ValueError:
                 print(f"Warning: Invalid date format for session: {session[1]}")
                 self.logger.warning(f"Invalid date format for session: {session[1]}")
