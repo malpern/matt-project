@@ -32,14 +32,15 @@ class GoogleCalendarSheetsAutomation:
     def run(self):
         try:
             logging.info("Starting the script...")
-            self.create_backup()
-            self.clear_or_create_tabs()
-            self.update_client_list()
+            self.sheet_manager.create_backup()
+            self.sheet_manager.clear_or_create_tab("CLIENT LIST")
+            self.sheet_manager.clear_or_create_tab("LAST WEEK")
+            self.sheet_manager.update_client_list()
             clients_met = self.process_calendar_events()
             if clients_met:
-                self.create_sessions_tab(clients_met)
-            self.reorder_tabs()
-            self.sheet_manager.add_unmatched_sessions()  # Call the method from SheetManager
+                self.sheet_manager.create_sessions_tab(clients_met)
+            self.sheet_manager.add_unmatched_sessions()
+            self.sheet_manager.reorder_tabs()
         except Exception as e:
             logging.error(f"An error occurred: {str(e)}")
             import traceback

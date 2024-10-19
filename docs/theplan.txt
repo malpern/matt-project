@@ -46,22 +46,11 @@ If these tabs don't exist, then create them. Both tabs names should be all caps
     4. CLIENT LIST
 
 ** Add last week's unmatched sessions to the sales & sessions completed tab **
-* Filter the "SESSIONS" tab to show only rows with "NO MATCH" in the match column.
+* Filter the "SESSIONS" tab for "NO MATCH"
 * For each unmatched session:
-    * Append the unmatched session to the end of the "Sales & Sessions Completed" tab with the following columns:
-        * Date
-        * Client Name
-        * "Individual"
-        * "x of x"
-        * "$XXX"
-        * "DUE???"
-        * "MONTHLY CALC??"
-        * "NO MATCH, INSERTED"
-    * Find the most recent entry for the same client in the "Sales & Sessions Completed" tab. This will be referred to as the "last row".
-    * In the "last row", locate the value in the "CURRENT SESSION" column.
-    * Update the "CURRENT SESSION" column in the newly added row by decrementing the value from the "last row". For example:
-        * If the "last row" value is "7 of 12", update the new row to "6 of 12".
-        * If the "last row" value is "2 of 3", update the new row to "1 of 3".
-        * If the "last row" value is "0 of 1", update the new row to "-1 of 1".
+    * Add the unmatched sessions after the last row of data in the "Sales & Sessions Completed" tab like this:
+        * Insert columns for date, client name, "Individual", "x of x", "$XXX", "DUE???", and "MONTLY CALC??", and "NO MATCH, INSERTED".
+        * Then look backwards in time in the table for the last time the person with the same name is listed. Let's call this the "last row". Look at the value in the "CURRENT SESSION" column in the last row.
+        * Now, for the row you just added update the "CURRENT SESSION" column from "x of x" to the value from the 'last row' "CURRENT SESSION" minus 1.  For example: If it was previously "7 of 12", you would insert the value "6 of 12".  If it was "2 of 3" you would insert "1 of 3". If it was "0 of 1" you would insert -1 of 1".
 * Repeat for all unmatched sessions.
 * and then sort the full table by the date column.
