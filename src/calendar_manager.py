@@ -28,3 +28,36 @@ class CalendarManager:
         events = events_result.get('items', [])
         logging.info(f"Found {len(events)} events.")
         return events
+
+    def get_unmatched_sessions(self) -> List[Dict]:
+        """Get unmatched sessions from the previous week."""
+        start_of_week, end_of_week = self.get_previous_week_range()
+        events = self.fetch_calendar_events(start_of_week, end_of_week)
+        
+        unmatched_sessions = []
+        for event in events:
+            event_date_str = event['start'].get('dateTime', event['start'].get('date'))
+            event_date = datetime.fromisoformat(event_date_str.replace('Z', '+00:00')).date()
+            event_time = datetime.fromisoformat(event_date_str.replace('Z', '+00:00')).strftime('%I:%M %p')
+            
+            client_name = self.extract_client_name(event)
+            if client_name:
+                unmatched_sessions.append({
+                    'date': event_date.strftime('%m/%d/%Y'),
+                    'time': event_time,
+                    'client_name': client_name
+                })
+        
+        return unmatched_sessions
+
+    def extract_client_name(self, event):
+        """Extract client name from event title or description."""
+        event_title = event.get('summary', '').lower()
+        event_description = event.get('description', '').lower()
+        
+        # Implement logic to extract client name
+        # This is a placeholder and should be improved based on your naming conventions
+        words = (event_title + ' ' + event_description).split()
+        if len(words) >= 2:
+            return ' '.join(words[:2]).title()
+        return None

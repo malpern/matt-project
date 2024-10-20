@@ -23,30 +23,52 @@ def main():
 
 class GoogleCalendarSheetsAutomation:
     def __init__(self):
-        self.gc = GoogleAuth.authorize()
+        self.logger = logging.getLogger(__name__)
         creds = GoogleAuth.get_credentials()
-        self.calendar_manager = CalendarManager(creds)
-        self.data_processor = DataProcessor()
-        self.sheet_manager = SheetManager(self.gc, SPREADSHEET_NAME, self.calendar_manager, self.data_processor)  # Pass DataProcessor
-        
+        self.gc = GoogleAuth.authorize()
+        self.spreadsheet = self.gc.open('Matt-data-2024-test')
+        self.sheet_manager = SheetManager(
+            gc=self.gc, 
+            spreadsheet_name='Matt-data-2024-test',
+            calendar_manager=CalendarManager(creds),
+            data_processor=DataProcessor()
+        )
+        self.calendar_manager = self.sheet_manager.calendar_manager
+
     def run(self):
         try:
-            logging.info("Starting the script...")
+            self.logger.info("Starting the script...")
             self.sheet_manager.create_backup()
             self.sheet_manager.clear_or_create_tab("CLIENT LIST")
             self.sheet_manager.clear_or_create_tab("LAST WEEK")
             self.sheet_manager.update_client_list()
             clients_met = self.process_calendar_events()
             if clients_met:
-                self.sheet_manager.create_sessions_tab(clients_met)
-            self.sheet_manager.add_unmatched_sessions()
-            self.sheet_manager.reorder_tabs()
+                # Ensure clients_met is a dictionary
+                if isinstance(clients_met, list):
+                    clients_met_dict = {client['client_name']: client for client in clients_met}
+                else:
+                    clients_met_dict = clients_met
+                self.sheet_manager.create_sessions_tab(clients_met_dict)
+            # Get unmatched sessions
+            unmatched_sessions = self.calendar_manager.get_unmatched_sessions()
+
+            # Get the current year's Sales & Sessions Completed sheet
+            current_year = datetime.now().year
+            sales_sheet = self.sheet_manager.find_sales_sheet(current_year)
+            
+            # Fetch all_values from the sales sheet
+            all_values = self.sheet_manager.get_all_values(sales_sheet)
+            
+            # Call add_unmatched_sessions with both arguments
+            self.sheet_manager.add_unmatched_sessions(unmatched_sessions, all_values)
+            self.reorder_tabs()
         except Exception as e:
-            logging.error(f"An error occurred: {str(e)}")
+            self.logger.error(f"An error occurred: {str(e)}")
             import traceback
             traceback.print_exc()
         finally:
-            logging.info("Script execution completed.")
+            self.logger.info("Script execution completed.")
 
     def create_backup(self):
         logging.info("Creating backup of 'Sales & Sessions Completed' tab...")
@@ -61,14 +83,8 @@ class GoogleCalendarSheetsAutomation:
         self.sheet_manager.update_client_list()
 
     def process_calendar_events(self) -> Dict[str, Dict[str, Union[List[Dict], int]]]:
-        start_of_week, end_of_week = self.calendar_manager.get_previous_week_range()
-        events = self.calendar_manager.fetch_calendar_events(start_of_week, end_of_week)
-        
-        client_dict = self.sheet_manager.get_client_dict()
-        clients_met = self.data_processor.process_events(events, client_dict)
-        self.update_last_week_tab(clients_met)
-        
-        return clients_met
+        unmatched_sessions = self.calendar_manager.get_unmatched_sessions()
+        return unmatched_sessions
 
     def update_last_week_tab(self, clients_met: Dict[str, Dict[str, Union[List[Dict], int]]]):
         self.sheet_manager.update_last_week_tab(clients_met)
@@ -78,6 +94,18 @@ class GoogleCalendarSheetsAutomation:
 
     def reorder_tabs(self):
         self.sheet_manager.reorder_tabs()
+
+    def process_event(self, event):
+        self.logger.debug(f"Processing event: {event.get('summary', 'No summary')}")
+        # Your existing code here
+        client_name = self.extract_client_name(event)
+        self.logger.debug(f"Extracted client name: {client_name}")
+        # Rest of your code
+
+    def extract_client_name(self, event):
+        # Your existing code here
+        self.logger.debug(f"Attempting to extract client name from: {event.get('summary', 'No summary')}")
+        # Rest of your extraction logic
 
 if __name__ == "__main__":
     main()

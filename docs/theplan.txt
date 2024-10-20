@@ -45,12 +45,19 @@ If these tabs don't exist, then create them. Both tabs names should be all caps
     3. SESSIONS
     4. CLIENT LIST
 
+** MATCHING DIRECTIONS **
 ** Add last week's unmatched sessions to the sales & sessions completed tab **
+* When working with the "Sales & Sessions Completed" tab, do not change the sort order. Work with the data as it is.
 * Filter the "SESSIONS" tab for "NO MATCH"
 * For each unmatched session:
-    * Add the unmatched sessions after the last row of data in the "Sales & Sessions Completed" tab like this:
-        * Insert columns for date, client name, "Individual", "x of x", "$XXX", "DUE???", and "MONTLY CALC??", and "NO MATCH, INSERTED".
-        * Then look backwards in time in the table for the last time the person with the same name is listed. Let's call this the "last row". Look at the value in the "CURRENT SESSION" column in the last row.
-        * Now, for the row you just added update the "CURRENT SESSION" column from "x of x" to the value from the 'last row' "CURRENT SESSION" minus 1.  For example: If it was previously "7 of 12", you would insert the value "6 of 12".  If it was "2 of 3" you would insert "1 of 3". If it was "0 of 1" you would insert -1 of 1".
+    * Search for rows containing the client name in the "CLIENT NAME" column. Find the last row with that name.
+        * When you find it print a message like "Found last time for client name X on date Y row Z".
+        * If you don't find it, print a message like "Client name X not found" and quit the program.
+    * If you found it, let's call the matching row the "last_time". 
+    * Calculate the new "CURRENT SESSION" value:
+        * If a last_time was found, update the "CURRENT SESSION" column from "x of x" to the value from the 'last_time' "CURRENT SESSION" minus 1.  For example: If it was previously "7 of 12", you would use the value "6 of 12".  If it was "2 of 3" you would use "1 of 3". If it was "0 of 1" you would use "-1 of 1".
+        * If no last_time was found, use "1 of 1" as the default value.
+    * Add the unmatched session after the last non-blank row in the "Sales & Sessions Completed" tab. If there aren't enough rows, add rows.
+        * Insert columns for date, client name, "Individual", the calculated "CURRENT SESSION" value, "$XXX", "DUE???", and "MONTHLY CALC??", and "NO MATCH, INSERTED".
 * Repeat for all unmatched sessions.
-* and then sort the full table by the date column.
+
