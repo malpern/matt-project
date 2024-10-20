@@ -51,13 +51,15 @@ If these tabs don't exist, then create them. Both tabs names should be all caps
 * Filter the "SESSIONS" tab for "NO MATCH"
 * For each unmatched session:
     * Search for rows containing the client name in the "CLIENT NAME" column. Find the last row with that name.
-        * When you find it print a message like "Found last time for client name X on date Y row Z".
-        * If you don't find it, print a message like "Client name X not found" and quit the program.
+        * When you find it print a message like "Found client: 'X', Row: Y, Date: Z, Current Session: 'A of B'"
+        * If you don't find it, print a message like "Client name X not found" and continue processing the next unmatched session.
     * If you found it, let's call the matching row the "last_time". 
     * Calculate the new "CURRENT SESSION" value:
-        * If a last_time was found, update the "CURRENT SESSION" column from "x of x" to the value from the 'last_time' "CURRENT SESSION" minus 1.  For example: If it was previously "7 of 12", you would use the value "6 of 12".  If it was "2 of 3" you would use "1 of 3". If it was "0 of 1" you would use "-1 of 1".
+        * If a last_time was found, decrement the "CURRENT SESSION" column from "x of y" to "(x-1) of y".  For example: If it was previously "7 of 12", you would use the value "6 of 12".  If it was "2 of 3" you would use "1 of 3". If it was "1 of 1" you would use "1 of 1".
         * If no last_time was found, use "1 of 1" as the default value.
-    * Add the unmatched session after the last non-blank row in the "Sales & Sessions Completed" tab. If there aren't enough rows, add rows.
-        * Insert columns for date, client name, "Individual", the calculated "CURRENT SESSION" value, "$XXX", "DUE???", and "MONTHLY CALC??", and "NO MATCH, INSERTED".
+        * if a last_time was found, let last_price be the "PRICE PER SESSION" value from the last_time row. if not, let last_price be "???".
+    * Add the unmatched session after the last row with data in the "Sales & Sessions Completed" tab. If there aren't enough rows, add rows as needed.
+        * Insert columns for date, client name, "Individual", the calculated "CURRENT SESSION" value, last_price, "DUE???", and "MONTHLY CALC??", and "NEW CLIENT" or "EXISTING CLIENT" as appropriate.
+    * Log a message indicating the new row added, including the row number, client name, and last_price.
 * Repeat for all unmatched sessions.
-
+* After processing all unmatched sessions, update the Google Sheet with the new rows in a single batch operation.
