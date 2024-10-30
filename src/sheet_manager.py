@@ -47,12 +47,15 @@ class SheetManager:
     def get_sheet(self, tab_name: str) -> pygsheets.Worksheet:
         return self.spreadsheet.worksheet_by_title(tab_name)
 
-    def find_sales_sheet(self, year):
-        sheet_name = f'Sales & Sessions Completed {year}'
+    def find_sales_sheet(self, year: int) -> Union[pygsheets.Worksheet, None]:
+        """Find the sales sheet for a given year."""
+        sheet_name = f"Sales & Sessions Completed {year}"
         try:
-            return self.spreadsheet.worksheet('title', sheet_name)
+            sheet = self.spreadsheet.worksheet('title', sheet_name)
+            self.logger.info(f"Found '{sheet_name}' tab.")
+            return sheet
         except Exception as e:
-            logger.error(f"Error finding sheet '{sheet_name}': {str(e)}")
+            self.logger.warning(f"Error finding sheet '{sheet_name}': {str(e)}")
             return None
 
     def create_backup(self):
@@ -137,93 +140,104 @@ class SheetManager:
         else:
             self.logger.info("No clients found.")
 
-    def update_last_week_tab(self, clients_met: Dict[str, Dict[str, Union[List[Dict], int]]]):
+    def update_last_week_tab(self, unmatched_sessions: List[Dict]):
         """Update the "LAST WEEK" tab with the clients met and their session details."""
         last_week_sheet = self.clear_or_create_tab("LAST WEEK")
+        
+        self.logger.info(f"Updating LAST WEEK tab with {len(unmatched_sessions)} clients")
+        
+        if not unmatched_sessions:
+            self.logger.info("No clients met with in the previous week.")
+            return
 
-        if clients_met:
-            self.logger.info(f"Updating 'LAST WEEK' tab with {len(clients_met)} entries...")
-            max_sessions = max(data['sessions'] for data in clients_met.values())
+        # Group sessions by client
+        clients_met = {}
+        for session in unmatched_sessions:
+            client_name = session['client_name']
+            if client_name not in clients_met:
+                clients_met[client_name] = {
+                    'sessions': [],
+                    'count': 0
+                }
+            clients_met[client_name]['sessions'].append(session)
+            clients_met[client_name]['count'] += 1
 
-            headers = ['CLIENT NAME', 'SESSIONS COMPLETED'] + [f'Session {i}' for i in range(1, max_sessions + 1)]
-            last_week_sheet.update_values('A1', [headers])
-            last_week_sheet.frozen_rows = 1
+        # Create headers
+        headers = ['CLIENT NAME', 'SESSIONS COMPLETED', 'SESSION DATES']
+        last_week_sheet.update_values('A1', [headers])
+        last_week_sheet.frozen_rows = 1
 
-            update_data = []
-            for client, data in clients_met.items():
-                row = [client, data['sessions']]
-                for event in sorted(data['events'], key=lambda e: e['start'].get('dateTime', e['start'].get('date'))):
-                    event_date = datetime.fromisoformat(event['start'].get('dateTime', event['start'].get('date'))[:10])
-                    row.append(event_date.strftime('%a %m/%d'))
-                update_data.append(row)
+        # Prepare data rows
+        update_data = []
+        for client_name, data in clients_met.items():
+            # Sort sessions by date
+            sorted_sessions = sorted(data['sessions'], key=lambda x: x['date'])
+            
+            # Format dates as "Day MM/DD"
+            formatted_dates = []
+            for session in sorted_sessions:
+                try:
+                    date_obj = datetime.strptime(session['date'], '%m/%d/%Y')
+                    formatted_date = date_obj.strftime('%a %m/%d')
+                    formatted_dates.append(formatted_date)
+                except ValueError:
+                    self.logger.warning(f"Invalid date format for session: {session['date']}")
+                    formatted_dates.append(session['date'])
 
+            row = [
+                client_name,
+                data['count'],
+                ', '.join(formatted_dates)
+            ]
+            update_data.append(row)
+
+        if update_data:
+            # Sort by number of sessions (descending)
             update_data.sort(key=lambda x: x[1], reverse=True)
-
-            last_week_sheet.clear('A2')
             last_week_sheet.update_values('A2', update_data)
             self.logger.info(f"Updated {len(update_data)} client(s) in the LAST WEEK tab.")
         else:
-            self.logger.info("No clients met with in the previous week.")
+            self.logger.info("No data to add to the LAST WEEK tab.")
 
-    def create_sessions_tab(self, clients_met: Dict[str, Dict[str, Union[List[Dict], int]]]):
-        """Create the "SESSIONS" tab with the sessions details for the previous week."""
+    def create_sessions_tab(self, unmatched_sessions: List[Dict]):
+        """Create the SESSIONS tab with chronological listing of all sessions."""
         sessions_sheet = self.clear_or_create_tab("SESSIONS")
+        
+        if not unmatched_sessions:
+            self.logger.info("No sessions to add to SESSIONS tab.")
+            return
 
-        headers = ['CLIENT NAME', 'DATE', 'TIME', 'MATCH STATUS']
-        sessions_sheet.update_values('A1:D1', [headers])
+        # Set up headers
+        headers = ['DATE', 'TIME', 'CLIENT NAME', 'STATUS']
+        sessions_sheet.update_values('A1', [headers])
         sessions_sheet.frozen_rows = 1
 
-        current_year = datetime.now().year
-        sales_sheet = self.find_sales_sheet(current_year)
-        sales_data = sales_sheet.get_all_values()
+        # Sort sessions by date
+        sorted_sessions = sorted(unmatched_sessions, 
+                               key=lambda x: datetime.strptime(x['date'], '%m/%d/%Y'))
 
-        client_col = sales_data[0].index("CLIENT NAME")
-        date_col = sales_data[0].index("DATE")
+        # Prepare data rows
+        update_data = []
+        for session in sorted_sessions:
+            row = [
+                session['date'],
+                session['time'],
+                session['client_name'],
+                'UNMATCHED'  # Default status
+            ]
+            update_data.append(row)
 
-        start_of_week, end_of_week = self.calendar_manager.get_previous_week_range()
-        
-        self.logger.info(f"Checking for matches between {start_of_week} and {end_of_week}")
-
-        sales_client_dates = {}
-        for row in sales_data[1:]:
-            if len(row) > max(client_col, date_col) and row[date_col].strip():
-                try:
-                    client = row[client_col].strip().lower()
-                    date_str = row[date_col].strip()
-                    date_obj = datetime.strptime(date_str, '%m/%d/%Y').date()
-                    if client not in sales_client_dates or date_obj > sales_client_dates[client]:
-                        sales_client_dates[client] = date_obj
-                except ValueError:
-                    self.logger.warning(f"Invalid date format in sales sheet: {row[date_col]}")
-
-        sessions_data = []
-        for client, data in clients_met.items():
-            if isinstance(data, dict) and 'events' in data:
-                for event in data['events']:
-                    event_date = event['start'].get('dateTime', event['start'].get('date'))
-                    date_obj = datetime.fromisoformat(event_date.replace('Z', '+00:00'))
-                    date_str = date_obj.strftime('%a %m/%d')
-                    time_str = date_obj.strftime('%I:%M %p')
-                    
-                    if start_of_week <= date_obj.date() <= end_of_week:
-                        client_lower = client.strip().lower()
-                        match_status = "NO MATCH"
-                        if client_lower in sales_client_dates:
-                            latest_sales_date = sales_client_dates[client_lower]
-                            if date_obj.date() > latest_sales_date:
-                                match_status = "NO MATCH"
-                            else:
-                                match_status = "MATCH"
-                        
-                        sessions_data.append([client, date_str, time_str, match_status])
-
-        sessions_data.sort(key=lambda x: datetime.strptime(f"{x[1]} {x[2]}", '%a %m/%d %I:%M %p'))
-        
-        if sessions_data:
-            sessions_sheet.update_values('A2', sessions_data)
-            self.logger.info(f"Added {len(sessions_data)} entries to the 'SESSIONS' tab.")
+        if update_data:
+            sessions_sheet.update_values('A2', update_data)
+            self.logger.info(f"Added {len(update_data)} sessions to the SESSIONS tab.")
         else:
-            self.logger.info("No data to add to the 'SESSIONS' tab.")
+            self.logger.info("No sessions to add to the SESSIONS tab.")
+
+        # Auto-resize columns
+        try:
+            sessions_sheet.adjust_column_width(1, len(headers))
+        except Exception as e:
+            self.logger.warning(f"Failed to auto-resize columns: {str(e)}")
 
     def get_column_index(self, sheet, column_name):
         if sheet.title not in self.column_indices:
@@ -240,17 +254,20 @@ class SheetManager:
         return sheet.cell((row_index, current_session_col + 1)).value or "1 of 1"
 
     def decrement_session(self, current_session):
-        logger.debug(f"Decrementing session: '{current_session}'")
+        """
+        Update session count based on the specified rules:
+        - "7 of 12" -> "8 of 12"
+        - "2 of 3" -> "3 of 3"
+        - "1 of 1" -> "2 of 1"
+        """
+        logger.debug(f"Incrementing session: '{current_session}'")
         try:
             current, total = map(int, current_session.strip().split(' of '))
             logger.debug(f"Parsed session - Current: {current}, Total: {total}")
 
-            if current > 1:
-                new_current = current - 1
-                logger.debug(f"Decremented current from {current} to {new_current}")
-            else:
-                new_current = 1  # Prevent going below 1
-                logger.debug(f"Current session is {current}, not decrementing.")
+            # Increment the current session number
+            new_current = current + 1
+            logger.debug(f"Incremented current from {current} to {new_current}")
 
             new_session = f"{new_current} of {total}"
             logger.debug(f"New session string: '{new_session}'")
@@ -259,84 +276,75 @@ class SheetManager:
             logger.error(f"ValueError: {e} - Invalid session format: '{current_session}'. Defaulting to '1 of 1'")
             return "1 of 1"
 
-    def add_unmatched_sessions(self, unmatched_sessions, all_values):
-        new_rows = []
-        client_col = 1  # Assuming 'Client Name' is in column B (index 1)
-        current_session_col = 3  # Assuming 'Current Session' is in column D (index 3)
-
-        logger.info(f"Adding {len(unmatched_sessions)} unmatched sessions to the sheet.")
-
-        # Get the current year's Sales & Sessions Completed sheet
-        current_year = datetime.now().year
-        sales_sheet = self.find_sales_sheet(current_year)
-
+    def add_unmatched_sessions(self, unmatched_sessions: List[Dict], all_values: List[List]):
+        """Add unmatched sessions to the sales sheet."""
+        self.logger.info(f"Adding {len(unmatched_sessions)} unmatched sessions to the sheet.")
+        
         # Find the last row with data
-        last_row_with_data = self.find_last_row_with_data(sales_sheet)
-        logger.info(f"Last row with data: {last_row_with_data}")
-
+        sales_sheet = self.find_sales_sheet(datetime.now().year)
+        last_row = self.find_last_row_with_data(sales_sheet)
+        self.logger.info(f"Last row with data: {last_row}")
+        
+        new_rows = []
         for session in unmatched_sessions:
             client_name = session['client_name']
-            last_client_row = self.find_last_client_row(all_values, client_col, client_name)
+            date = session['date']
             
-            logger.debug(f"Processing client: '{client_name}', Last row: {last_client_row}")
+            # Find the last entry for this client
+            last_client_data = None
+            for row in reversed(all_values):
+                if row and len(row) > 1 and row[1] == client_name:
+                    last_client_data = row
+                    break
             
-            if last_client_row is not None and last_client_row > 0:
-                try:
-                    # Ensure current_session_col is within bounds
-                    if current_session_col < len(all_values[last_client_row - 1]):
-                        current_session = all_values[last_client_row - 1][current_session_col]
-                        logger.debug(f"Retrieved current session for '{client_name}': '{current_session}'")
-                        new_current_session = self.decrement_session(current_session)
-                        logger.debug(f"Decremented session for '{client_name}': '{new_current_session}'")
-                    else:
-                        logger.error(f"Current session column index {current_session_col} out of range for row {last_client_row}. Using default session.")
-                        new_current_session = "1 of 1"
-                except IndexError as e:
-                    logger.error(f"IndexError: {e} - while processing '{client_name}' at row {last_client_row}. Using default session '1 of 1'.")
-                    new_current_session = "1 of 1"
-            else:
-                new_current_session = "1 of 1"
-                logger.debug(f"Client '{client_name}' is new. Using default session value '1 of 1'.")
-
+            # Set default values
+            last_price = "???"
+            current_session = "1 of 1"
+            client_status = "NEW CLIENT"  # Only set for new clients
+            payment_status = ""
+            
+            if last_client_data:
+                client_status = ""  # Empty for existing clients
+                if len(last_client_data) > 4 and last_client_data[4]:
+                    last_price = last_client_data[4]
+                if len(last_client_data) > 3 and last_client_data[3]:
+                    try:
+                        current, total = map(int, last_client_data[3].split(' of '))
+                        current_session = f"{current + 1} of {total}"
+                        if current + 1 >= total and last_price != "???":
+                            price = float(last_price.replace('$', ''))
+                            total_due = int(price * total)  # Convert to integer to remove cents
+                            payment_status = f'DUE: ${total_due}'
+                    except (ValueError, AttributeError):
+                        current_session = "1 of 1"
+            
             new_row = [
-                session['date'],
+                date,
                 client_name,
-                "Individual",
-                new_current_session,
-                "$XXX",
-                "DUE???",
-                "MONTHLY CALC??",
-                "EXISTING CLIENT" if last_client_row is not None else "NEW CLIENT"
+                'Individual',
+                current_session,
+                last_price,
+                payment_status,
+                'MONTHLY CALC??',
+                client_status  # Will be "NEW CLIENT" or empty string
             ]
             new_rows.append(new_row)
-            
-            # Calculate the new row number
-            new_row_number = last_row_with_data + len(new_rows)
-            
-            logger.info(f"Prepared row {new_row_number} for '{client_name}': {new_row}")
-
-        # Check if we need to extend the sheet
-        needed_row_count = last_row_with_data + len(new_rows)
-        current_row_count = sales_sheet.rows
+            self.logger.info(f"Added row {last_row + len(new_rows)} for '{client_name}': {new_row}")
         
-        if needed_row_count > current_row_count:
-            rows_to_add = needed_row_count - current_row_count
-            logger.info(f"Extending sheet by {rows_to_add} rows")
-            sales_sheet.add_rows(rows_to_add)
-
-        # Update the Google Sheet with the new rows
+        # Extend the sheet if necessary
         if new_rows:
-            start_row = last_row_with_data + 1
-            end_row = last_row_with_data + len(new_rows)
-            range_to_update = f'A{start_row}:H{end_row}'
-            try:
-                sales_sheet.update_values(range_to_update, new_rows)
-                logger.info(f"Updated Google Sheet with {len(new_rows)} new rows, from row {start_row} to {end_row}.")
-            except Exception as e:
-                logger.error(f"Error updating sheet: {str(e)}")
-                # You might want to implement a retry mechanism here
-
-        logger.info("Completed adding unmatched sessions.")
+            needed_rows = last_row + len(new_rows)
+            current_rows = sales_sheet.rows
+            if needed_rows > current_rows:
+                rows_to_add = needed_rows - current_rows + 100  # Add extra buffer
+                self.logger.info(f"Extending sheet by {rows_to_add} rows")
+                sales_sheet.add_rows(rows_to_add)
+            
+            # Update the sheet with new rows
+            range_to_update = f'A{last_row + 1}:H{last_row + len(new_rows)}'
+            sales_sheet.update_values(range_to_update, new_rows)
+            self.logger.info(f"Updated Google Sheet with {len(new_rows)} new rows, from row {last_row + 1} to {last_row + len(new_rows)}.")
+        
         return new_rows
 
     def find_last_client_row(self, all_values, client_col, client_name):
@@ -384,30 +392,33 @@ class SheetManager:
         self.api_call_with_retry(sheet.update_values, f'A{last_row + 1}:H{last_row + rows_to_add}', new_rows)
         self.logger.info(f"Inserted {rows_to_add} new row(s)")
 
-    def reorder_tabs(self):
-        """Reorder the tabs in the desired order."""
-        self.logger.info("Reordering tabs...")
-        desired_order = [
-            f"Sales & Sessions Completed {datetime.now().year}",
-            "LAST WEEK",
-            "SESSIONS",
-            "CLIENT LIST"
-        ]
-        
-        worksheets = self.spreadsheet.worksheets()
-        current_order = [ws.title for ws in worksheets]
-        
-        for index, tab_name in enumerate(desired_order):
-            if tab_name in current_order:
-                current_index = current_order.index(tab_name)
-                if current_index != index:
-                    worksheet = worksheets[current_index]
-                    worksheet.index = index + 1  # pygsheets uses 1-based indexing
-                    self.logger.info(f"Moved '{tab_name}' to position {index + 1}")
-            else:
-                self.logger.warning(f"Tab '{tab_name}' not found in the spreadsheet")
-        
-        self.logger.info("Tab reordering completed")
+    def reorder_tabs(self, tab_order: List[str] = None):
+        """Reorder the tabs in the spreadsheet according to the specified order."""
+        if tab_order is None:
+            tab_order = [
+                "Sales & Sessions Completed 2024",
+                "LAST WEEK",
+                "SESSIONS",
+                "CLIENT LIST"
+            ]
+
+        try:
+            # Get all worksheets
+            worksheets = {ws.title: ws for ws in self.spreadsheet.worksheets()}
+            
+            # Reorder tabs using index property
+            for index, tab_name in enumerate(tab_order):
+                if tab_name in worksheets:
+                    worksheet = worksheets[tab_name]
+                    if worksheet.index != index:
+                        worksheet.index = index
+                        self.logger.info(f"Moved '{tab_name}' to position {index + 1}")
+                else:
+                    self.logger.warning(f"Tab '{tab_name}' not found in spreadsheet")
+            
+            self.logger.info("Tabs reordered successfully")
+        except Exception as e:
+            self.logger.error(f"Error reordering tabs: {str(e)}")
 
     def sort_sales_sheet(self, sheet):
         """Sort the "Sales & Sessions Completed" tab by date in descending order."""
@@ -497,3 +508,6 @@ class SheetManager:
             if any(values[i]):
                 return i + 1  # +1 because sheet rows are 1-indexed
         return 1  # Return 1 if the sheet is empty
+
+
+

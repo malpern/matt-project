@@ -91,5 +91,37 @@ class TestSheetManager(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.sheet_manager.get_all_values()
 
+    def test_process_unmatched_sessions(self):
+        # Mock unmatched sessions
+        unmatched_sessions = [
+            {
+                'date': '03/18/2024',
+                'time': '10:30 AM',
+                'client_name': 'John Smith',
+                'match_status': 'NO MATCH'
+            }
+        ]
+        
+        # Mock existing data
+        existing_data = [
+            ['Date', 'Client Name', 'Type', 'Current Session', 'Price Per Session', 'Payment Status'],
+            ['03/15/2024', 'John Smith', 'Individual', '3 of 5', '100', '']
+        ]
+        
+        # Mock sheet manager methods
+        self.sheet_manager.get_all_values = Mock(return_value=existing_data)
+        self.sheet_manager.update_values = Mock()
+        
+        # Process the unmatched sessions
+        self.sheet_manager.process_unmatched_sessions(unmatched_sessions)
+        
+        # Verify the new row was added correctly
+        self.sheet_manager.update_values.assert_called_once()
+        new_row = self.sheet_manager.update_values.call_args[0][0][0]
+        
+        self.assertEqual(new_row[1], 'John Smith')
+        self.assertEqual(new_row[3], '4 of 5')
+        self.assertEqual(new_row[4], '100')
+
 if __name__ == '__main__':
     unittest.main()

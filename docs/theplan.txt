@@ -14,8 +14,9 @@ If these tabs don't exist, then create them. Both tabs names should be all caps
 
     * In this sheet, look at the "CLIENT NAME" column.
     * We want to create a list of the unique names and put them in the "CLIENT LIST" Tab. There may be existing names listed there, don't duplicate the names, only add any new ones you find.
-    * Then in the column to the right, add up the number of sessions completed for each client and put that in the "SESSIONS COMPLETED" column.
-    Be sure to do this before deduping the list of clients.
+    * Don't try to do any fancy fuzzy matching.
+    * Then in the column to the right, add up the total number of sessions completed (all-time) for each client and put that in the "SESSIONS COMPLETED" column.
+    * Be sure to do this before deduping the list of clients.
     * Add column heads to the "CLIENT LIST" tab: "CLIENT NAME", "SESSIONS COMPLETED". Freeze the row with the column heads so it's always visible as you scroll.
     * Make sure the results are sorted by the number of sessions completed, descending.
 
@@ -55,11 +56,25 @@ If these tabs don't exist, then create them. Both tabs names should be all caps
         * If you don't find it, print a message like "Client name X not found" and continue processing the next unmatched session.
     * If you found it, let's call the matching row the "last_time". 
     * Calculate the new "CURRENT SESSION" value:
-        * If a last_time was found, decrement the "CURRENT SESSION" column from "x of y" to "(x-1) of y".  For example: If it was previously "7 of 12", you would use the value "6 of 12".  If it was "2 of 3" you would use "1 of 3". If it was "1 of 1" you would use "1 of 1".
+        * If a last_time was found, increment the "CURRENT SESSION" column from "x of y" to "(x+1) of y".  For example: If it was previously "7 of 12", you would use the value "8 of 12".  If it was "2 of 3" you would use "3 of 3". If it was "1 of 1" you would use "2 of 1".
         * If no last_time was found, use "1 of 1" as the default value.
         * if a last_time was found, let last_price be the "PRICE PER SESSION" value from the last_time row. if not, let last_price be "???".
+            * if last_time is "1 of 1", the last_due is the last_price.
+    If the CURRENT SESSION is "x of y" then:
+        * When x is greater than or equal to y, set the "PAYMENT STATUS" column to ("PRICE PER SESSION" * x)
+        * When x is less than y, leave the "PAYMENT STATUS" column empty
     * Add the unmatched session after the last row with data in the "Sales & Sessions Completed" tab. If there aren't enough rows, add rows as needed.
-        * Insert columns for date, client name, "Individual", the calculated "CURRENT SESSION" value, last_price, "DUE???", and "MONTHLY CALC??", and "NEW CLIENT" or "EXISTING CLIENT" as appropriate.
+        * Insert columns for date, client name, "Individual", the calculated "CURRENT SESSION" value, last_price, 'DUE: PAYMENT STATUS' formatted as a $dollars with no cents, and "MONTHLY CALC??", and "NEW CLIENT" or nothing for EXISTING CLIENTs as appropriate.
     * Log a message indicating the new row added, including the row number, client name, and last_price.
 * Repeat for all unmatched sessions.
 * After processing all unmatched sessions, update the Google Sheet with the new rows in a single batch operation.
+
+** REVENUE SUMMARY **
+Let's not do the Revenue Summary yet. Commenting out for now.
+// * The code to power this chart should be in a seperate file from the rest of the code, named "revenue_summary.py".
+// * Create a new tab called "REVENUE SUMMARY"
+// * On this tab there will be several charts. Across the top should be a chart that shows the revenue by month, with seperate series for each year. The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's revenue next to last year's revenue.
+// * Below that should be a chart that shows the number of sessions by month, with seperate series for each year. The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's revenue next to last year's revenue.
+// * Add a chart that shows the churn rate (as defined by the number of clients who had sessions last month but do not have any sessions this month). The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's churn rate next to last year's churn rate.
+// * Add a chart that shows the number of new clients by month, with seperate series for each year. The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's new clients next to last year's new clients.
+// * Add a chart that shows the number of returning clients by month, with seperate series for each year. The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's returning clients next to last year's returning clients.

@@ -51,13 +51,19 @@ class CalendarManager:
         return unmatched_sessions
 
     def extract_client_name(self, event):
-        """Extract client name from event title or description."""
-        event_title = event.get('summary', '').lower()
-        event_description = event.get('description', '').lower()
+        """Extract client name from event title and description with fuzzy matching."""
+        event_title = event.get('summary', '')
+        event_description = event.get('description', '')
         
-        # Implement logic to extract client name
-        # This is a placeholder and should be improved based on your naming conventions
-        words = (event_title + ' ' + event_description).split()
+        # Combine title and description for searching
+        text_to_search = f"{event_title} {event_description}"
+        
+        # TODO: Implement fuzzy matching against the client list
+        # This should be integrated with the SheetManager to get the current client list
+        # and use fuzzy matching to find the best match
+        
+        # For now, return the first two words of the title as a basic implementation
+        words = event_title.split()
         if len(words) >= 2:
-            return ' '.join(words[:2]).title()
+            return ' '.join(words[:2]).strip()
         return None
