@@ -2,10 +2,11 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Union
 import pygsheets
-from collections import defaultdict
+from collections import defaultdict, Counter
 import time
 from googleapiclient.errors import HttpError
 import sys
+from difflib import SequenceMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -276,35 +277,81 @@ class SheetManager:
             logger.error(f"ValueError: {e} - Invalid session format: '{current_session}'. Defaulting to '1 of 1'")
             return "1 of 1"
 
+    def similar(self, a: str, b: str, threshold: float = 0.85) -> bool:
+        """
+        Return True if strings are similar above threshold.
+        Handles None values and strips/lowercases strings before comparison.
+        """
+        if not a or not b:  # Handle None or empty strings
+            return False
+        return SequenceMatcher(None, a.strip().lower(), b.strip().lower()).ratio() > threshold
+
+    def get_canonical_name(self, client_name: str, all_values: List[List]) -> str:
+        """
+        Find the most common spelling of a client name from historical entries.
+        Returns original name if no matches found.
+        """
+        # Create a case-insensitive dictionary to track spellings
+        name_variants = {}  # lowercase -> original case mapping
+        name_counts = Counter()  # count occurrences case-insensitively
+        
+        self.logger.debug(f"\nSearching for variants of '{client_name}':")
+        
+        for row in all_values[1:]:  # Skip header row
+            if row and len(row) > 1:
+                current_name = row[1].strip()
+                if self.similar(current_name, client_name):
+                    lowercase_name = current_name.lower()
+                    self.logger.debug(f"Found variant: '{current_name}' (lowercase: '{lowercase_name}')")
+                    name_counts[lowercase_name] += 1
+                    # Keep first occurrence of a particular capitalization
+                    if lowercase_name not in name_variants:
+                        name_variants[lowercase_name] = current_name
+        
+        if not name_counts:
+            self.logger.debug("No variants found")
+            return client_name
+            
+        # Get the most common name (case-insensitive)
+        most_common_lowercase = name_counts.most_common(1)[0][0]
+        canonical_name = name_variants[most_common_lowercase]
+        
+        self.logger.info(f"Name variants found for '{client_name}':")
+        self.logger.info(f"- Variants: {dict(name_variants)}")
+        self.logger.info(f"- Counts: {dict(name_counts)}")
+        self.logger.info(f"- Selected canonical form: '{canonical_name}'")
+        
+        return canonical_name
+
     def add_unmatched_sessions(self, unmatched_sessions: List[Dict], all_values: List[List]):
         """Add unmatched sessions to the sales sheet."""
         self.logger.info(f"Adding {len(unmatched_sessions)} unmatched sessions to the sheet.")
         
-        # Find the last row with data
         sales_sheet = self.find_sales_sheet(datetime.now().year)
         last_row = self.find_last_row_with_data(sales_sheet)
         self.logger.info(f"Last row with data: {last_row}")
         
         new_rows = []
         for session in unmatched_sessions:
-            client_name = session['client_name']
+            original_name = session['client_name']
+            # Get the canonical name before processing
+            client_name = self.get_canonical_name(original_name, all_values)
             date = session['date']
             
             # Find the last entry for this client
             last_client_data = None
             for row in reversed(all_values):
-                if row and len(row) > 1 and row[1] == client_name:
+                if row and len(row) > 1 and self.similar(row[1], client_name):
                     last_client_data = row
                     break
             
             # Set default values
             last_price = "???"
             current_session = "1 of 1"
-            client_status = "NEW CLIENT"  # Only set for new clients
+            client_status = "NEW CLIENT" if not last_client_data else ""
             payment_status = ""
             
             if last_client_data:
-                client_status = ""  # Empty for existing clients
                 if len(last_client_data) > 4 and last_client_data[4]:
                     last_price = last_client_data[4]
                 if len(last_client_data) > 3 and last_client_data[3]:
@@ -313,20 +360,20 @@ class SheetManager:
                         current_session = f"{current + 1} of {total}"
                         if current + 1 >= total and last_price != "???":
                             price = float(last_price.replace('$', ''))
-                            total_due = int(price * total)  # Convert to integer to remove cents
+                            total_due = int(price * total)
                             payment_status = f'DUE: ${total_due}'
                     except (ValueError, AttributeError):
                         current_session = "1 of 1"
             
             new_row = [
                 date,
-                client_name,
+                client_name,  # Use the canonical name here
                 'Individual',
                 current_session,
                 last_price,
                 payment_status,
                 'MONTHLY CALC??',
-                client_status  # Will be "NEW CLIENT" or empty string
+                client_status
             ]
             new_rows.append(new_row)
             self.logger.info(f"Added row {last_row + len(new_rows)} for '{client_name}': {new_row}")
