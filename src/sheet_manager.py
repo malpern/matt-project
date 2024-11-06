@@ -556,5 +556,81 @@ class SheetManager:
                 return i + 1  # +1 because sheet rows are 1-indexed
         return 1  # Return 1 if the sheet is empty
 
+    def calculate_monthly_revenue(self):
+        """Calculate and update monthly revenue totals in the Sales & Sessions Completed tab."""
+        try:
+            # Get the Sales & Sessions Completed sheet for current year
+            current_year = datetime.now().year
+            sales_sheet = self.find_sales_sheet(current_year)
+            self.logger.info(f"Calculating monthly revenue for {sales_sheet.title}")
+
+            # Get all values
+            data = sales_sheet.get_all_values()
+            if len(data) < 2:  # Check if there's data beyond headers
+                self.logger.info("No data found for revenue calculation")
+                return
+
+            # Find the date and price columns
+            headers = data[0]
+            try:
+                date_col = headers.index('Date')
+                price_col = headers.index('PRICE PER SESSION')
+            except ValueError as e:
+                self.logger.error(f"Required column not found: {e}")
+                return
+
+            # Group data by month and calculate totals
+            monthly_totals = {}
+            last_row_indices = {}
+            
+            for row_idx, row in enumerate(data[1:], start=1):  # Skip header row
+                try:
+                    # Parse date
+                    date_str = row[date_col]
+                    if not date_str:
+                        continue
+                        
+                    date = datetime.strptime(date_str, '%m/%d/%Y')
+                    month_key = date.strftime('%Y-%m')
+                    
+                    # Get price value
+                    price_str = row[price_col]
+                    if price_str:
+                        # Remove '$' and convert to float
+                        price = float(price_str.replace('$', '').replace(',', ''))
+                        
+                        # Add to monthly total
+                        monthly_totals[month_key] = monthly_totals.get(month_key, 0) + price
+                        
+                        # Update last row index for this month
+                        last_row_indices[month_key] = row_idx + 1  # +1 because row_idx is 0-based
+
+                except (ValueError, IndexError) as e:
+                    self.logger.warning(f"Error processing row {row_idx + 1}: {e}")
+                    continue
+
+            # Update the monthly totals in column G of the last row of each month
+            batch_updates = []
+            for month_key, total in monthly_totals.items():
+                if month_key in last_row_indices:
+                    row_num = last_row_indices[month_key]
+                    formatted_total = f"${total:,.2f}"
+                    batch_updates.append({
+                        'range': f'G{row_num}',
+                        'values': [[formatted_total]]
+                    })
+                    self.logger.info(f"Month {month_key}: Total ${total:,.2f} (Row {row_num})")
+
+            # Apply all updates in a single batch operation
+            if batch_updates:
+                sales_sheet.batch_update(batch_updates)
+                self.logger.info(f"Updated monthly totals for {len(batch_updates)} months")
+            else:
+                self.logger.info("No monthly totals to update")
+
+        except Exception as e:
+            self.logger.error(f"Error calculating monthly revenue: {e}")
+            raise
+
 
 

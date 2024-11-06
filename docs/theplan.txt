@@ -5,76 +5,87 @@ When I run the program do this:
 
 ** Create a backup **
 * Create a backup of the "Sales & Sessions Completed" tab before making any modifications.
-* Ensure that we keep at most one version of the backup. If a backup already exists, delete the old one before creating a new one.
+* Delete any existing backup sheets that start with "BACKUP_Sales & Sessions Completed"
+* Create a new backup with timestamp in the name (format: BACKUP_Sales & Sessions Completed YYYY_YYYYMMDD_HHMMSS)
+* Copy all data from original to backup in chunks to avoid API limits
 
-Clear the "CLIENT LIST" tab and the "LAST WEEK" tab of prior data in the "Matt-data-2024-test" sheet.
-If these tabs don't exist, then create them. Both tabs names should be all caps
+** Clear or Create Required Tabs **
+* Clear the "CLIENT LIST" tab and the "LAST WEEK" tab of prior data in the "Matt-data-2024-test" sheet.
+* If these tabs don't exist, then create them. Both tab names should be all caps.
+
 ** Make CLIENT LIST **
 * Look at the Google sheet file "Matt-data-2024-test" and the tab whose name contains "Sales & Sessions Completed" and the current year, eg "Sales & Sessions Completed 2024".
+* In this sheet:
+    * Find and extract the "CLIENT NAME" column
+    * Count total sessions for each unique client name
+    * Create a sorted list of unique client names with their session counts
+    * Update the "CLIENT LIST" tab with:
+        * Headers: "CLIENT NAME", "SESSIONS COMPLETED"
+        * Sorted data (by sessions completed, descending)
+        * Freeze the header row
 
-    * In this sheet, look at the "CLIENT NAME" column.
-    * We want to create a list of the unique names and put them in the "CLIENT LIST" Tab. There may be existing names listed there, don't duplicate the names, only add any new ones you find.
-    * Don't try to do any fancy fuzzy matching.
-    * Then in the column to the right, add up the total number of sessions completed (all-time) for each client and put that in the "SESSIONS COMPLETED" column.
-    * Be sure to do this before deduping the list of clients.
-    * Add column heads to the "CLIENT LIST" tab: "CLIENT NAME", "SESSIONS COMPLETED". Freeze the row with the column heads so it's always visible as you scroll.
-    * Make sure the results are sorted by the number of sessions completed, descending.
+** Process Calendar Events **
+* Connect to Google Calendar (f4lathletics@gmail.com)
+* Get events from previous week (Monday-Sunday of last week)
+* For each event:
+    * Extract date (MM/DD/YYYY format)
+    * Extract time (HH:MM AM/PM format)
+    * Extract client name from event title/description
+    * Store as unmatched sessions
 
-** Look at the prior week on the calendar **
-* open my google calendar, specifically "f4lathletics@gmail.com"
-* Look at the events during the prior week. I'm defining the prior week as Monday-Sunday of the week before the current week.
-* For each event, look at the title and description.
-* See if it contains the name of a client.
-    * Consider partial matches, typos, misspellings, and only first or last names when you match.
-    * Add the list of clients who Matt met with last week to a "LAST WEEK" tab in the "Matt-data-2024-test" sheet.
-    * I want the client list to be deduplicated, with columns for the "CLIENT NAME", "SESSIONS COMPLETED"
-* The number of sessions completed should be a running total of the number sessions completed for the client that week. eg. "1" or "2" or "3", etc.
-    * Sort the list by the number of sessions completed last week descending.
-    * Freeze the row with the column heads so it's always visible as you scroll.
-* List the dates of the sessions Matt met with clients last week one per column, in this style. eg. "Tues 9/10". If they met twice use two columns. etc. Label the columns "Session 1", "Session 2", etc. Only add as many columns as you need. The largest number of sessions any client had last week is the number of columns you should make, not more.
+** Update LAST WEEK Tab **
+* Create headers: "CLIENT NAME", "SESSIONS COMPLETED", "SESSION DATES"
+* For each client from calendar events:
+    * List client name
+    * Show total sessions for the week
+    * Format dates as "Day MM/DD" (e.g., "Tue 09/10")
+    * Sort by number of sessions completed (descending)
+    * Freeze the header row
 
-** Make another tab called "SESSIONS"**
-* List the folks Matt met with last week, and the date. Add a column for the time the session started formatted like this "10:30 AM". List them chronologically, one per row.
+** Create SESSIONS Tab **
+* List all sessions chronologically with columns:
+    * Client Name
+    * Date
+    * Time (HH:MM AM/PM format)
+    * Match Status ("MATCH" or "NO MATCH" based on Sales & Sessions Completed tab)
 
-* Add a column to the right of the date on the "SESSIONS" tab. In this column check and see if you can find a matching session on the same date for this client in the "Sales & Sessions Completed" tab from last week.
- * If you find a match, write "MATCH". If not, write "NO MATCH". 
+** Add Unmatched Sessions **
+* Filter SESSIONS tab for "NO MATCH" entries
+* For each unmatched session:
+    * Find appropriate insertion point in Sales & Sessions Completed tab (based on date)
+    * Insert new row with:
+        * Date (MM/DD/YYYY)
+        * Client Name
+        * "Individual"
+        * "x of x" (placeholder for session count)
+        * "$XXX" (placeholder for price)
+        * "DUE???" (placeholder for payment status)
+        * "MONTHLY CALC??" (placeholder)
+        * "NO MATCH, INSERTED" (status indicator)
+    * Show confirmation prompt:
+        * 'y' - confirm and continue
+        * 'n' - remove row and continue
+        * 'a' - accept all remaining without prompting
+        * 'q' - quit processing
 
 ** Clean up order of the tabs **
-* Make sure the order of the tabs in the "Matt-data-2024-test" sheet is:
-    1. Sales & Sessions Completed (this year)
+* Ensure tabs are ordered as:
+    1. Sales & Sessions Completed (current year)
     2. LAST WEEK
     3. SESSIONS
     4. CLIENT LIST
 
-** MATCHING DIRECTIONS **
-** Add last week's unmatched sessions to the sales & sessions completed tab **
-* When working with the "Sales & Sessions Completed" tab, do not change the sort order. Work with the data as it is.
-* Filter the "SESSIONS" tab for "NO MATCH"
-* For each unmatched session:
-    * Search for rows containing the client name in the "CLIENT NAME" column. Find the last row with that name.
-        * When you find it print a message like "Found client: 'X', Row: Y, Date: Z, Current Session: 'A of B'"
-        * If you don't find it, print a message like "Client name X not found" and continue processing the next unmatched session.
-    * If you found it, let's call the matching row the "last_time". 
-    * Calculate the new "CURRENT SESSION" value:
-        * If a last_time was found, increment the "CURRENT SESSION" column from "x of y" to "(x+1) of y".  For example: If it was previously "7 of 12", you would use the value "8 of 12".  If it was "2 of 3" you would use "3 of 3". If it was "1 of 1" you would use "2 of 1".
-        * If no last_time was found, use "1 of 1" as the default value.
-        * if a last_time was found, let last_price be the "PRICE PER SESSION" value from the last_time row. if not, let last_price be "???".
-            * if last_time is "1 of 1", the last_due is the last_price.
-    If the CURRENT SESSION is "x of y" then:
-        * When x is greater than or equal to y, set the "PAYMENT STATUS" column to ("PRICE PER SESSION" * x)
-        * When x is less than y, leave the "PAYMENT STATUS" column empty
-    * Add the unmatched session after the last row with data in the "Sales & Sessions Completed" tab. If there aren't enough rows, add rows as needed.
-        * Insert columns for date, client name, "Individual", the calculated "CURRENT SESSION" value, last_price, 'DUE: PAYMENT STATUS' formatted as a $dollars with no cents, and "MONTHLY CALC??", and "NEW CLIENT" or nothing for EXISTING CLIENTs as appropriate.
-    * Log a message indicating the new row added, including the row number, client name, and last_price.
-* Repeat for all unmatched sessions.
-* After processing all unmatched sessions, update the Google Sheet with the new rows in a single batch operation.
+** Logging **
+* Log all major operations and their status
+* Include informative messages for:
+    * Number of clients/sessions found
+    * Backup creation/deletion
+    * Tab updates
+    * Data processing steps
 
-** REVENUE SUMMARY **
-Let's not do the Revenue Summary yet. Commenting out for now.
-// * The code to power this chart should be in a seperate file from the rest of the code, named "revenue_summary.py".
-// * Create a new tab called "REVENUE SUMMARY"
-// * On this tab there will be several charts. Across the top should be a chart that shows the revenue by month, with seperate series for each year. The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's revenue next to last year's revenue.
-// * Below that should be a chart that shows the number of sessions by month, with seperate series for each year. The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's revenue next to last year's revenue.
-// * Add a chart that shows the churn rate (as defined by the number of clients who had sessions last month but do not have any sessions this month). The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's churn rate next to last year's churn rate.
-// * Add a chart that shows the number of new clients by month, with seperate series for each year. The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's new clients next to last year's new clients.
-// * Add a chart that shows the number of returning clients by month, with seperate series for each year. The chart should have a legend that shows the year for each series. The bars should be side by side so you can see this year's returning clients next to last year's returning clients.
+** Monthly Revenue Calculation **
+ * For all the rows in the Sales & Sessions Completed tab:
+    For each months data:
+    * Find the last row for each month
+    * Sum the "PRICE" column for each month
+    * Display the total revenue for that month in column G of the last row for each month
